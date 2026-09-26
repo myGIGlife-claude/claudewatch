@@ -10,7 +10,8 @@ Zero dependencies (Python 3 stdlib only). Reads straight from /proc and /sys.
 
 Install:  sudo install -m 755 claude-dash.py /usr/local/bin/claude-dash
 """
-import argparse, curses, json, os, shutil, socket, subprocess, sys, threading, time
+import argparse, curses, json, os, shutil, socket, subprocess, sys, threading, time, urllib.request
+from datetime import datetime
 
 CLK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
@@ -18,6 +19,9 @@ NCPU = os.cpu_count() or 1
 HOME = os.path.expanduser("~")
 FULL, EMPTY = "█", "░"
 API_HOST = "api.anthropic.com"
+USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+USAGE_CACHE = os.path.join(HOME, ".cache", "claude-dash-usage.json")
+CLAUDE_DIR = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")
 MCP_HINTS = ("node", "npx", "uvx", "uv", "python", "python3", "bun", "deno", "docker")
 
 
@@ -187,6 +191,58 @@ def inotify_usage():
     return watches, inst
 
 
+def _epoch(iso):
+    try:
+        return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+    except Exception:
+        return None
+
+
+def parse_usage(d):
+    """Maps the usage endpoint's reply to {session, week, week_opus: {pct, resets}}."""
+    out = {}
+    for key, name in (("five_hour", "session"), ("seven_day", "week"), ("seven_day_opus", "week_opus")):
+        v = d.get(key)
+        if isinstance(v, dict) and v.get("utilization") is not None:
+            out[name] = {"pct": round(float(v["utilization"]), 1), "resets": _epoch(v.get("resets_at") or "")}
+    return out or {"error": "No usage data for this account"}
+
+
+def claude_usage(max_age=60):
+    """Plan usage and reset times from the endpoint Claude Code's /usage uses (undocumented).
+    Uses the OAuth token Claude Code keeps in ~/.claude; the token is only sent to Anthropic.
+    Cached for max_age seconds so a phone polling every 5s doesn't hammer the API."""
+    # ponytail: undocumented endpoint; if Anthropic changes it this degrades to an error string, not a crash
+    try:
+        with open(USAGE_CACHE) as f:
+            c = json.load(f)
+        if time.time() - c["at"] < max_age:
+            return c["usage"]
+    except Exception:
+        pass
+    try:
+        with open(os.path.join(CLAUDE_DIR, ".credentials.json")) as f:
+            tok = json.load(f)["claudeAiOauth"]["accessToken"]
+    except Exception:
+        return {"error": "Claude Code isn't logged in on this server"}
+    req = urllib.request.Request(USAGE_URL, headers={
+        "Authorization": f"Bearer {tok}", "anthropic-beta": "oauth-2025-04-20", "User-Agent": "claude-dash"})
+    try:
+        with urllib.request.urlopen(req, timeout=6) as r:
+            u = parse_usage(json.load(r))
+    except urllib.error.HTTPError as e:
+        u = {"error": "Login expired - run claude on the server once" if e.code == 401 else f"Usage API error {e.code}"}
+    except Exception:
+        u = {"error": "Couldn't reach the usage API"}
+    try:
+        os.makedirs(os.path.dirname(USAGE_CACHE), exist_ok=True)
+        with open(USAGE_CACHE, "w") as f:
+            json.dump({"at": time.time(), "usage": u}, f)
+    except Exception:
+        pass
+    return u
+
+
 # ---------------- slow checks (background thread) ----------------
 class SlowChecks(threading.Thread):
     """Things too expensive to run every tick: network probe, systemd, inotify."""
@@ -196,7 +252,7 @@ class SlowChecks(threading.Thread):
         self.every = every
         self.d = {"api": None, "dns_ms": None, "tcp_ms": None, "earlyoom": "?",
                   "oom_kills": None, "failed": None, "inotify": (0, 0),
-                  "version": "", "ready": False}
+                  "version": "", "usage": None, "ready": False}
 
     def probe_api(self):
         try:
@@ -211,7 +267,7 @@ class SlowChecks(threading.Thread):
         except Exception:
             return False, None, None
 
-    def check_once(self):
+    def check_once(self, usage=True):
         if not self.d["version"]:
             claude_bin = shutil.which("claude") or os.path.join(HOME, ".local/bin/claude")
             if os.path.exists(claude_bin):
@@ -224,6 +280,8 @@ class SlowChecks(threading.Thread):
         j = run(["journalctl", "-u", "earlyoom", "--since", "-24h", "--no-pager", "-q"], timeout=8)
         self.d["oom_kills"] = j.count("sending SIG") if j or self.d["oom_kills"] is None else self.d["oom_kills"]
         self.d["inotify"] = inotify_usage()
+        if usage:
+            self.d["usage"] = claude_usage()
         self.d["ready"] = True
 
     def run(self):
@@ -474,6 +532,20 @@ def build(s, slow, width, interval):
     L.append([("NET   ", "head"), ("↓ ", "dim"), (f"{fb(rx)}/s", "norm"), ("  ↑ ", "dim"), (f"{fb(tx)}/s", "norm")] + api)
     L.append([])
 
+    # Plan usage
+    u = slow.get("usage") or {}
+    if u.get("error"):
+        L.append([("USAGE ", "head"), (u["error"], "dim")])
+    elif u:
+        row = [("USAGE ", "head")]
+        for k, name in (("session", "5h"), ("week", "week"), ("week_opus", "opus")):
+            if k in u:
+                x = u[k]
+                when = time.strftime("%a %H:%M", time.localtime(x["resets"])) if x.get("resets") else "?"
+                row += [(f"{name} ", "dim"), (f"{x['pct']:.0f}%", lvl(x["pct"], 70, 90)), (f" resets {when}   ", "dim")]
+        L.append(row)
+    L.append([])
+
     # Claude sessions
     ss = s["sessions"]
     tot_rss = sum(x["rss"] + x["child_rss"] for x in ss)
@@ -604,17 +676,22 @@ def to_json(s, slow):
         "sys": {"procs": s["nprocs"], "zombies": s["zombies"], "fds": s["files"][0],
                 "inotify": slow["inotify"][0], "inotify_max": s["inotify_max"],
                 "earlyoom": slow["earlyoom"], "oom_kills": slow["oom_kills"], "failed_units": slow["failed"]},
+        "usage": slow.get("usage"),
         "alerts": [{"level": l, "msg": msg} for l, msg in health(s, slow)],
     }
 
 
 def run_json():
+    t0 = time.time()
     slow = SlowChecks()
-    t = threading.Thread(target=slow.check_once, daemon=True)
+    t = threading.Thread(target=slow.check_once, args=(False,), daemon=True)
     t.start()
+    tu = threading.Thread(target=lambda: slow.d.update(usage=claude_usage()), daemon=True)
+    tu.start()
     sampler = Sampler()
     time.sleep(1)
     t.join(10)
+    tu.join(max(0.0, 10 - (time.time() - t0)))
     print(json.dumps(to_json(sampler.sample(), slow.d), separators=(",", ":")))
 
 

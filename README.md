@@ -22,6 +22,7 @@ It connects over SSH with a key locked to a single read-only command. The app ca
 - **Home-screen widget** with CPU, memory, disk and zram bars, a Claude session count, API latency and the current top alert. It refreshes every 15 minutes, or when you tap ↻.
 - **Live dashboard** in the app that polls every 5 seconds while it's open, with per-core CPU, memory pressure (PSI), disk and network I/O, earlyoom status and failed systemd units.
 - **Claude Code sessions**: PID, CPU, memory including MCP child processes, working directory and age for each session.
+- **Claude plan usage**: your 5-hour session and weekly limits as percentages, with when each one resets, in the app and on the widget.
 - **Health alerts**: low RAM, memory/IO/CPU pressure, CPU steal, a full disk, swap overflow, an unreachable API, OOM kills and failed units.
 - **No accounts, no cloud, no tracking.** Your phone talks directly to your server.
 

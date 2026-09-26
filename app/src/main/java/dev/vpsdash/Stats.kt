@@ -10,6 +10,11 @@ data class Session(
 
 data class Alert(val level: String, val msg: String)
 
+/** One plan limit: percent used, and when it resets (epoch seconds). */
+data class Limit(val pct: Double, val resets: Long?)
+
+data class Usage(val session: Limit?, val week: Limit?, val weekOpus: Limit?, val error: String?)
+
 data class Stats(
     val host: String, val ts: Long, val uptime: Long, val load: List<Double>,
     val cpuBusy: Double, val cpuUsr: Double, val cpuSys: Double, val cpuIowait: Double, val cpuSteal: Double,
@@ -25,6 +30,7 @@ data class Stats(
     val procs: Int, val zombies: Int, val fds: Int, val inotify: Int, val inotifyMax: Int,
     val earlyoom: String, val oomKills: Int?, val failedUnits: Int?,
     val alerts: List<Alert>,
+    val usage: Usage?,
 ) {
     val memPct get() = pct(memUsed, memTotal)
     val zramPct get() = pct(zramUsed, zramTotal)
@@ -91,6 +97,10 @@ data class Stats(
                     val a = alertA.getJSONObject(it)
                     Alert(a.getString("level"), a.getString("msg"))
                 },
+                usage = j.optJSONObject("usage")?.let { u ->
+                    fun lim(k: String) = u.optJSONObject(k)?.let { Limit(it.getDouble("pct"), it.lOrNull("resets")) }
+                    Usage(lim("session"), lim("week"), lim("week_opus"), if (u.isNull("error")) null else u.optString("error"))
+                },
             )
         }
     }
@@ -98,6 +108,7 @@ data class Stats(
 
 private fun JSONObject.dOrNull(k: String) = if (!has(k) || isNull(k)) null else getDouble(k)
 private fun JSONObject.iOrNull(k: String) = if (!has(k) || isNull(k)) null else getInt(k)
+private fun JSONObject.lOrNull(k: String) = if (!has(k) || isNull(k)) null else getLong(k)
 
 fun pct(a: Long, b: Long) = if (b > 0) 100.0 * a / b else 0.0
 
@@ -130,6 +141,12 @@ fun fmtDur(sec: Long): String {
         h > 0 -> "${h}h${m}m"
         else -> "${m}m"
     }
+}
+
+/** "2h14m" until an epoch-seconds time, or "now" once it has passed. */
+fun fmtUntil(epochSec: Long): String {
+    val left = epochSec - System.currentTimeMillis() / 1000
+    return if (left <= 0) "now" else fmtDur(left)
 }
 
 fun f0(v: Double) = String.format(Locale.US, "%.0f", v)

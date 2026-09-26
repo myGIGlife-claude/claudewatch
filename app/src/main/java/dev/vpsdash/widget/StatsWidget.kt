@@ -203,8 +203,12 @@ private fun WidgetBody(p: Preferences) {
                 level(s.zramPct, 60.0, 85.0))
         }
 
+        // Plan usage: absolute reset time, since the widget only redraws every ~15 min
+        s.usage?.session?.let { Bar("5H", it.pct, "${f0(it.pct)}% · ${resetAt(it.resets)}") }
+        if (!compact) s.usage?.week?.let { Bar("WEEK", it.pct, "${f0(it.pct)}% · ${resetAt(it.resets)}") }
+
         // Claude + API
-        Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (!compact) Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text = "Claude ", style = TextStyle(color = cp(ACCENT), fontSize = 12.sp, fontWeight = FontWeight.Bold))
             Text(
                 text = "${s.sessions.size} running · ${fmtBytes(s.claudeRss)}",
@@ -269,6 +273,14 @@ private fun Tile(label: String, pct: Double, sub: String, lvl: String, compact: 
     }
 }
 
+/** "15:40" if within a day, else "Tue 09:00". */
+private fun resetAt(epochSec: Long?): String {
+    if (epochSec == null) return "?"
+    val ms = epochSec * 1000
+    val pattern = if (ms - System.currentTimeMillis() < 86_400_000) "HH:mm" else "EEE HH:mm"
+    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(ms))
+}
+
 @Composable
 private fun Bar(label: String, pct: Double, right: String, lvl: String = level(pct, 70.0, 90.0)) {
     Row(
@@ -288,7 +300,7 @@ private fun Bar(label: String, pct: Double, right: String, lvl: String = level(p
         )
         Text(
             text = right,
-            modifier = GlanceModifier.width(88.dp),
+            modifier = GlanceModifier.width(104.dp),
             style = TextStyle(color = cp(TEXT), fontSize = 11.sp, textAlign = TextAlign.End),
             maxLines = 1,
         )

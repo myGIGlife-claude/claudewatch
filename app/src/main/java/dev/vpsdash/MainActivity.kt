@@ -293,6 +293,8 @@ private fun Dashboard(
         }
     }
 
+    s.usage?.let { UsagePanel(it) }
+
     if (s.alerts.isNotEmpty()) Section("Alerts") { s.alerts.forEach { AlertRow(it) } }
 
     // Claude
@@ -434,10 +436,44 @@ private fun MetricBar(label: String, pct: Double, right: String, lvl: String = l
     val f by animateFloatAsState((pct / 100).toFloat().coerceIn(0f, 1f), tween(600), label = label)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = DIM, fontSize = 13.sp, modifier = Modifier.width(52.dp))
-        Box(Modifier.weight(1f).height(8.dp).background(TRACK, RoundedCornerShape(4.dp))) {
-            Box(Modifier.fillMaxWidth(f).fillMaxHeight().background(lvlColor(lvl), RoundedCornerShape(4.dp)))
-        }
+        Meter(f, lvl, Modifier.weight(1f))
         Text(right, fontSize = 13.sp, style = NUM, modifier = Modifier.padding(start = 12.dp))
+    }
+}
+
+@Composable
+private fun Meter(fraction: Float, lvl: String, modifier: Modifier) {
+    Box(modifier.height(8.dp).background(TRACK, RoundedCornerShape(4.dp))) {
+        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(lvlColor(lvl), RoundedCornerShape(4.dp)))
+    }
+}
+
+@Composable
+private fun UsagePanel(u: Usage) {
+    Section("Claude plan usage", ACCENT) {
+        u.error?.let { Stat(it, "warn") }
+        u.session?.let { LimitRow("5-hour session", it) }
+        u.week?.let { LimitRow("Weekly", it) }
+        u.weekOpus?.let { LimitRow("Weekly · Opus", it) }
+    }
+}
+
+@Composable
+private fun LimitRow(label: String, l: Limit) {
+    val lvl = level(l.pct, 70.0, 90.0)
+    val f by animateFloatAsState((l.pct / 100).toFloat().coerceIn(0f, 1f), tween(600), label = label)
+    Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("${f0(l.pct)}%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = lvlColor(lvl), style = NUM)
+        }
+        Meter(f, lvl, Modifier.fillMaxWidth())
+        l.resets?.let {
+            Text(
+                "Resets in ${fmtUntil(it)}  ·  " + SimpleDateFormat("EEE HH:mm", Locale.getDefault()).format(Date(it * 1000)),
+                color = DIM, fontSize = 12.sp, style = NUM,
+            )
+        }
     }
 }
 

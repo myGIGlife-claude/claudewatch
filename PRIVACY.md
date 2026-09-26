@@ -21,6 +21,8 @@ The app connects only to the server you configure, over SSH. It doesn't use anal
 
 The stats come from your server. They include CPU, memory and disk usage, hostname, process IDs and the working directories of Claude Code sessions. They travel over encrypted SSH to your device and aren't sent anywhere else.
 
+To show your Claude plan usage, the server script sends the Claude Code login token already on your server to Anthropic's usage endpoint, as Claude Code itself does. The app never receives or stores that token.
+
 ## Children
 
 The app isn't directed at children and doesn't knowingly collect data from anyone.
