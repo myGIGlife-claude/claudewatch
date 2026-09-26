@@ -25,9 +25,9 @@ object SshClient {
         session.connect(15_000)
         try {
             val fp = session.hostKey.getFingerPrint(jsch)
-            val pinned = Prefs.fingerprint(ctx)
+            val pinned = Prefs.fingerprint(ctx, cfg.id)
             when {
-                pinned == null -> Prefs.setFingerprint(ctx, fp)
+                pinned == null -> Prefs.setFingerprint(ctx, cfg.id, fp)
                 pinned != fp -> throw HostKeyChangedException(pinned, fp)
             }
 

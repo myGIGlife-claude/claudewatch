@@ -16,6 +16,7 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.ActionParameters
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -67,6 +68,9 @@ private val KEY_JSON = stringPreferencesKey("json")
 private val KEY_TIME = longPreferencesKey("time")
 private val KEY_ERR = stringPreferencesKey("err")
 private val KEY_CONFIGURED = booleanPreferencesKey("configured")
+private val KEY_SERVER = stringPreferencesKey("server")
+private val KEY_NAME = stringPreferencesKey("name")
+private val SERVER_PARAM = ActionParameters.Key<String>(MainActivity.EXTRA_SERVER)
 
 private val BG = Color(0xF20B1120)
 private val TILE = Color(0xFF151E30)
@@ -92,17 +96,19 @@ class StatsWidget : GlanceAppWidget() {
     companion object {
         /** Copies the latest cached result into every placed widget and redraws them. */
         suspend fun pushAll(ctx: Context) {
-            val ids = GlanceAppWidgetManager(ctx).getGlanceIds(StatsWidget::class.java)
-            val json = Prefs.lastJson(ctx)
-            val time = Prefs.lastTime(ctx)
-            val err = Prefs.lastError(ctx)
-            val configured = Prefs.config(ctx) != null
-            ids.forEach { id ->
+            val mgr = GlanceAppWidgetManager(ctx)
+            mgr.getGlanceIds(StatsWidget::class.java).forEach { id ->
+                // Each widget shows the server picked when it was added (first server if none/removed)
+                val cfg = Prefs.server(ctx, Prefs.widgetServer(ctx, mgr.getAppWidgetId(id)))
+                val json = cfg?.let { Prefs.lastJson(ctx, it.id) }
+                val err = cfg?.let { Prefs.lastError(ctx, it.id) }
                 updateAppWidgetState(ctx, id) { p ->
-                    if (json != null) p[KEY_JSON] = json
-                    p[KEY_TIME] = time
+                    if (json != null) p[KEY_JSON] = json else p.remove(KEY_JSON)
+                    p[KEY_TIME] = cfg?.let { Prefs.lastTime(ctx, it.id) } ?: 0L
                     if (err != null) p[KEY_ERR] = err else p.remove(KEY_ERR)
-                    p[KEY_CONFIGURED] = configured
+                    p[KEY_CONFIGURED] = cfg != null
+                    p[KEY_SERVER] = cfg?.id ?: ""
+                    p[KEY_NAME] = cfg?.name ?: ""
                 }
                 StatsWidget().update(ctx, id)
             }
@@ -144,7 +150,7 @@ private fun WidgetBody(p: Preferences) {
     Column(
         modifier = GlanceModifier.fillMaxSize().background(BG).cornerRadius(24.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp)
-            .clickable(actionStartActivity<MainActivity>()),
+            .clickable(actionStartActivity<MainActivity>(actionParametersOf(SERVER_PARAM to (p[KEY_SERVER] ?: "")))),
     ) {
         // Header: status dot, host, time, refresh
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -156,7 +162,7 @@ private fun WidgetBody(p: Preferences) {
             Box(modifier = GlanceModifier.size(8.dp).background(dot).cornerRadius(4.dp)) {}
             Spacer(modifier = GlanceModifier.width(8.dp))
             Text(
-                text = s?.host ?: "ClaudeWatch",
+                text = p[KEY_NAME]?.ifBlank { null } ?: s?.host ?: "ClaudeWatch",
                 modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = cp(TEXT), fontSize = 14.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,

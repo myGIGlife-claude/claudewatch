@@ -6,7 +6,7 @@ ClaudeWatch doesn't collect, store or share any personal data with the developer
 
 ## What the app stores on your device
 
-- The server host, port and username you enter.
+- The host, port, username and optional name of each server you add.
 - An SSH key pair it generates. The private key is encrypted with the Android Keystore.
 - Your server's SSH host key fingerprint.
 - The most recent stats received from your server, so the widget can show them.
@@ -15,7 +15,7 @@ All of this stays on your device. Uninstalling the app deletes it.
 
 ## Network connections
 
-The app connects only to the server you configure, over SSH. It doesn't use analytics, advertising, crash reporting or any other third-party service, and it has no backend of its own.
+The app connects only to the servers you add, over SSH. It doesn't use analytics, advertising, crash reporting or any other third-party service, and it has no backend of its own.
 
 ## Data from your server
 

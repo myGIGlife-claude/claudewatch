@@ -25,4 +25,4 @@ To show your 5-hour and weekly limits, `claude-dash` reads the OAuth token Claud
 
 ## Revoking access
 
-Delete the line ending in `claudewatch@android` (or `vps-dash@android` for v1.0 keys) from `~/.ssh/authorized_keys` on the server.
+Delete the line ending in `ClaudeWatch_<device>_<date>` from `~/.ssh/authorized_keys` on the server. Keys from v1.0-1.5 end in `vps-dash@android` or `claudewatch@android`.
