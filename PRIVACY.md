@@ -31,4 +31,4 @@ Any changes to this policy will be published in this file.
 
 ## Contact
 
-Open an issue at https://github.com/myGIGlife-claude/claude-vps-widget/issues.
+Open an issue at https://github.com/myGIGlife-claude/claudewatch/issues.

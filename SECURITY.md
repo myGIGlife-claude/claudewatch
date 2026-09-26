@@ -4,7 +4,7 @@ ClaudeWatch holds an SSH key to your server, so security reports are taken serio
 
 ## Reporting a vulnerability
 
-Please **don't open a public issue**. Report it privately through [GitHub Security Advisories](https://github.com/myGIGlife-claude/claude-vps-widget/security/advisories/new).
+Please **don't open a public issue**. Report it privately through [GitHub Security Advisories](https://github.com/myGIGlife-claude/claudewatch/security/advisories/new).
 
 Include the steps to reproduce it, the affected version and the impact. You'll get a reply within 7 days.
 

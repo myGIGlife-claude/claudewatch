@@ -4,8 +4,8 @@
 
 **Watch your Claude Code server from your phone's home screen.**
 
-[![Build](https://github.com/myGIGlife-claude/claude-vps-widget/actions/workflows/build.yml/badge.svg)](https://github.com/myGIGlife-claude/claude-vps-widget/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/v/release/myGIGlife-claude/claude-vps-widget)](https://github.com/myGIGlife-claude/claude-vps-widget/releases/latest)
+[![Build](https://github.com/myGIGlife-claude/claudewatch/actions/workflows/build.yml/badge.svg)](https://github.com/myGIGlife-claude/claudewatch/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/myGIGlife-claude/claudewatch)](https://github.com/myGIGlife-claude/claudewatch/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white)
@@ -37,8 +37,8 @@ It connects over SSH with a key locked to a single read-only command. The app ca
 ### 1. Install the server script on your VPS
 
 ```sh
-git clone https://github.com/myGIGlife-claude/claude-vps-widget.git
-sudo install -m 755 claude-vps-widget/server/claude-dash.py /usr/local/bin/claude-dash
+git clone https://github.com/myGIGlife-claude/claudewatch.git
+sudo install -m 755 claudewatch/server/claude-dash.py /usr/local/bin/claude-dash
 claude-dash --json   # should print one line of JSON
 ```
 
@@ -46,7 +46,7 @@ It needs Linux and Python 3, with no other dependencies. Run `claude-dash` on it
 
 ### 2. Install the app
 
-Download the latest `ClaudeWatch-*.apk` from [**Releases**](https://github.com/myGIGlife-claude/claude-vps-widget/releases/latest) on your phone and open it. Android will ask you to allow installs from your browser.
+Download the latest `ClaudeWatch-*.apk` from [**Releases**](https://github.com/myGIGlife-claude/claudewatch/releases/latest) on your phone and open it. Android will ask you to allow installs from your browser.
 
 ### 3. Connect
 
