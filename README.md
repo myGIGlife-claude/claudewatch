@@ -46,7 +46,7 @@ It needs Linux and Python 3, with no other dependencies. Run `claude-dash` on it
 
 ### 2. Install the app
 
-Download the latest `app-debug.apk` from [**Releases**](https://github.com/myGIGlife-claude/claude-vps-widget/releases/latest) on your phone and open it. Android will ask you to allow installs from your browser.
+Download the latest `ClaudeWatch-*.apk` from [**Releases**](https://github.com/myGIGlife-claude/claude-vps-widget/releases/latest) on your phone and open it. Android will ask you to allow installs from your browser.
 
 ### 3. Connect
 
