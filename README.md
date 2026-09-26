@@ -105,8 +105,8 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability, and [PRIVACY.md](PRIVA
 You need JDK 17 and Gradle 8.11+.
 
 ```sh
-gradle assembleDebug
-# app/build/outputs/apk/debug/app-debug.apk
+gradle assembleRelease
+# app/build/outputs/apk/release/app-release.apk (signed with the debug key unless KEYSTORE_FILE is set)
 ```
 
 Every push is built by [GitHub Actions](.github/workflows/build.yml), which uploads the APK as a build artifact.
