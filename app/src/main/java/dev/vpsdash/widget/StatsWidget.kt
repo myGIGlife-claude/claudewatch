@@ -31,6 +31,7 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
@@ -64,13 +65,14 @@ private val KEY_TIME = longPreferencesKey("time")
 private val KEY_ERR = stringPreferencesKey("err")
 private val KEY_CONFIGURED = booleanPreferencesKey("configured")
 
-private val BG = Color(0xF0101418)
-private val TRACK = Color(0x33FFFFFF)
-private val TEXT = Color(0xFFE6E8EA)
-private val DIM = Color(0xFF8A939C)
-private val OK = Color(0xFF4CD37A)
-private val WARN = Color(0xFFF5C451)
-private val CRIT = Color(0xFFFF5C5C)
+private val BG = Color(0xF20B1120)
+private val TILE = Color(0xFF151E30)
+private val TRACK = Color(0xFF26324A)
+private val TEXT = Color(0xFFF1F5F9)
+private val DIM = Color(0xFF94A3B8)
+private val OK = Color(0xFF22C55E)
+private val WARN = Color(0xFFF5B83D)
+private val CRIT = Color(0xFFEF4444)
 private val ACCENT = Color(0xFFD97757)
 
 private fun lvlColor(l: String) = when (l) { "crit" -> CRIT; "warn" -> WARN; else -> OK }
@@ -128,7 +130,8 @@ class StatsWidgetReceiver : GlanceAppWidgetReceiver() {
 @Composable
 private fun WidgetBody(p: Preferences) {
     val size = LocalSize.current
-    val tall = size.height >= 150.dp
+    val compact = size.height < 150.dp
+    val tall = size.height >= 200.dp
     val s = Stats.parseOrNull(p[KEY_JSON])
     val time = p[KEY_TIME] ?: 0L
     val err = p[KEY_ERR]
@@ -136,42 +139,41 @@ private fun WidgetBody(p: Preferences) {
     val stale = time > 0 && System.currentTimeMillis() - time > 35 * 60_000
 
     Column(
-        modifier = GlanceModifier.fillMaxSize().background(BG).cornerRadius(18.dp)
+        modifier = GlanceModifier.fillMaxSize().background(BG).cornerRadius(24.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .clickable(actionStartActivity<MainActivity>()),
     ) {
-        // Header
+        // Header: status dot, host, time, refresh
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val dot = when {
                 s == null -> DIM
                 err != null || stale -> WARN
                 else -> lvlColor(s.health)
             }
-            Text(text = "●", style = TextStyle(color = cp(dot), fontSize = 13.sp))
-            Spacer(modifier = GlanceModifier.width(6.dp))
+            Box(modifier = GlanceModifier.size(8.dp).background(dot).cornerRadius(4.dp)) {}
+            Spacer(modifier = GlanceModifier.width(8.dp))
             Text(
                 text = s?.host ?: "ClaudeWatch",
                 modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = cp(TEXT), fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                style = TextStyle(color = cp(TEXT), fontSize = 14.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,
             )
             if (time > 0) {
                 Text(
-                    text = (if (err != null) "⚠ " else "") +
-                        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(time)),
+                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(time)),
                     style = TextStyle(color = cp(if (err != null || stale) WARN else DIM), fontSize = 11.sp),
                 )
             }
             Image(
                 provider = ImageProvider(R.drawable.ic_refresh),
                 contentDescription = "Refresh",
-                modifier = GlanceModifier.size(28.dp).padding(start = 6.dp)
+                modifier = GlanceModifier.size(36.dp).padding(8.dp)
                     .clickable(actionRunCallback<RefreshAction>()),
             )
         }
 
         if (s == null) {
-            Spacer(modifier = GlanceModifier.height(8.dp))
+            Spacer(modifier = GlanceModifier.height(6.dp))
             Text(
                 text = when {
                     !configured -> "Tap to connect your VPS"
@@ -184,46 +186,47 @@ private fun WidgetBody(p: Preferences) {
             return@Column
         }
 
-        // Bars
-        Bar("CPU", s.cpuBusy, "${f0(s.cpuBusy)}%" + if (s.cpuSteal >= 5) " st${f0(s.cpuSteal)}" else "")
-        Bar("MEM", s.memPct, "${fmtBytes(s.memUsed)}/${fmtBytes(s.memTotal)}")
+        // Metric tiles
+        Spacer(modifier = GlanceModifier.height(4.dp))
+        Row(modifier = GlanceModifier.fillMaxWidth()) {
+            Tile("CPU", s.cpuBusy, if (s.cpuSteal >= 5) "steal ${f0(s.cpuSteal)}%" else "load ${String.format(Locale.US, "%.2f", s.load.firstOrNull() ?: 0.0)}",
+                level(s.cpuBusy, 70.0, 90.0), compact, GlanceModifier.defaultWeight())
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Tile("MEM", s.memPct, "${fmtBytes(s.memUsed)}/${fmtBytes(s.memTotal)}",
+                level(s.memPct, 70.0, 90.0), compact, GlanceModifier.defaultWeight())
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Tile("DISK", s.diskPct, "${fmtBytes(s.diskUsed)}/${fmtBytes(s.diskTotal)}",
+                level(s.diskPct, 80.0, 90.0), compact, GlanceModifier.defaultWeight())
+        }
         if (tall && s.zramTotal > 0) {
             Bar("ZRAM", s.zramPct, "${fmtBytes(s.zramUsed)} ${String.format(Locale.US, "%.1fx", s.zramRatio)}",
                 level(s.zramPct, 60.0, 85.0))
         }
-        Bar("DISK", s.diskPct, "${fmtBytes(s.diskUsed)}/${fmtBytes(s.diskTotal)}", level(s.diskPct, 80.0, 90.0))
 
         // Claude + API
-        Spacer(modifier = GlanceModifier.height(4.dp))
-        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(text = "Claude ", style = TextStyle(color = cp(ACCENT), fontSize = 11.sp, fontWeight = FontWeight.Bold))
+        Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(text = "Claude ", style = TextStyle(color = cp(ACCENT), fontSize = 12.sp, fontWeight = FontWeight.Bold))
             Text(
-                text = "${s.sessions.size} · ${fmtBytes(s.claudeRss)}",
+                text = "${s.sessions.size} running · ${fmtBytes(s.claudeRss)}",
                 modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = cp(TEXT), fontSize = 11.sp),
+                style = TextStyle(color = cp(TEXT), fontSize = 12.sp),
                 maxLines = 1,
             )
-            val apiTxt = when (s.apiOk) {
-                true -> "API ${f0(s.apiMs ?: 0.0)}ms"
-                false -> "API DOWN"
-                null -> "API ?"
+            val (apiTxt, apiCol) = when (s.apiOk) {
+                true -> "API ${f0(s.apiMs ?: 0.0)}ms" to lvlColor(level(s.apiMs ?: 0.0, 150.0, 300.0))
+                false -> "API down" to CRIT
+                null -> "API ?" to DIM
             }
-            val apiCol = when (s.apiOk) {
-                true -> lvlColor(level(s.apiMs ?: 0.0, 150.0, 300.0))
-                false -> CRIT
-                null -> DIM
-            }
-            Text(text = apiTxt, style = TextStyle(color = cp(apiCol), fontSize = 11.sp))
+            Text(text = apiTxt, style = TextStyle(color = cp(apiCol), fontSize = 12.sp))
         }
 
         // Health line
         val first = s.alerts.firstOrNull()
         Text(
             text = when {
-                err != null -> "⚠ $err"
-                first != null -> (if (first.level == "crit") "✗ " else "! ") + first.msg +
-                    if (s.alerts.size > 1) "  (+${s.alerts.size - 1})" else ""
-                else -> "✓ Healthy"
+                err != null -> err
+                first != null -> first.msg + if (s.alerts.size > 1) "  +${s.alerts.size - 1} more" else ""
+                else -> "All systems healthy"
             },
             modifier = GlanceModifier.padding(top = 2.dp),
             style = TextStyle(
@@ -236,19 +239,50 @@ private fun WidgetBody(p: Preferences) {
 }
 
 @Composable
+private fun Tile(label: String, pct: Double, sub: String, lvl: String, compact: Boolean, modifier: GlanceModifier) {
+    Column(modifier = modifier.background(TILE).cornerRadius(14.dp).padding(horizontal = 8.dp, vertical = 6.dp)) {
+        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                modifier = GlanceModifier.defaultWeight(),
+                style = TextStyle(color = cp(DIM), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+            )
+            Text(
+                text = "${f0(pct)}%",
+                style = TextStyle(color = cp(lvlColor(lvl)), fontSize = if (compact) 13.sp else 16.sp, fontWeight = FontWeight.Bold),
+            )
+        }
+        LinearProgressIndicator(
+            progress = (pct / 100.0).toFloat().coerceIn(0f, 1f),
+            modifier = GlanceModifier.fillMaxWidth().height(4.dp).padding(top = 1.dp),
+            color = cp(lvlColor(lvl)),
+            backgroundColor = cp(TRACK),
+        )
+        if (!compact) {
+            Text(
+                text = sub,
+                modifier = GlanceModifier.padding(top = 3.dp),
+                style = TextStyle(color = cp(DIM), fontSize = 10.sp),
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
 private fun Bar(label: String, pct: Double, right: String, lvl: String = level(pct, 70.0, 90.0)) {
     Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp),
+        modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
-            modifier = GlanceModifier.width(38.dp),
-            style = TextStyle(color = cp(DIM), fontSize = 11.sp, fontWeight = FontWeight.Medium),
+            modifier = GlanceModifier.width(40.dp),
+            style = TextStyle(color = cp(DIM), fontSize = 10.sp, fontWeight = FontWeight.Bold),
         )
         LinearProgressIndicator(
             progress = (pct / 100.0).toFloat().coerceIn(0f, 1f),
-            modifier = GlanceModifier.defaultWeight().height(6.dp),
+            modifier = GlanceModifier.defaultWeight().height(4.dp),
             color = cp(lvlColor(lvl)),
             backgroundColor = cp(TRACK),
         )
