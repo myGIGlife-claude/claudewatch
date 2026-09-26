@@ -48,7 +48,10 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.glance.LocalContext
+import dev.vpsdash.Limit
 import dev.vpsdash.MainActivity
+import dev.vpsdash.fmtClock
 import dev.vpsdash.Prefs
 import dev.vpsdash.R
 import dev.vpsdash.Refresh
@@ -203,9 +206,17 @@ private fun WidgetBody(p: Preferences) {
                 level(s.zramPct, 60.0, 85.0))
         }
 
-        // Plan usage: absolute reset time, since the widget only redraws every ~15 min
-        s.usage?.session?.let { Bar("5H", it.pct, "${f0(it.pct)}% · ${resetAt(it.resets)}") }
-        if (!compact) s.usage?.week?.let { Bar("WEEK", it.pct, "${f0(it.pct)}% · ${resetAt(it.resets)}") }
+        // Plan usage tiles: clock time, not a countdown, since the widget only redraws every ~15 min
+        val u = s.usage
+        if (u != null && (u.session != null || u.week != null)) {
+            val ctx = LocalContext.current
+            fun resets(l: Limit) = l.resets?.let { "resets ${fmtClock(ctx, it)}" } ?: ""
+            Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp)) {
+                u.session?.let { Tile("SESSION", it.pct, resets(it), level(it.pct, 70.0, 90.0), compact, GlanceModifier.defaultWeight()) }
+                if (u.session != null && u.week != null) Spacer(modifier = GlanceModifier.width(6.dp))
+                u.week?.let { Tile("WEEKLY", it.pct, resets(it), level(it.pct, 70.0, 90.0), compact, GlanceModifier.defaultWeight()) }
+            }
+        }
 
         // Claude + API
         if (!compact) Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -273,14 +284,6 @@ private fun Tile(label: String, pct: Double, sub: String, lvl: String, compact: 
     }
 }
 
-/** "15:40" if within a day, else "Tue 09:00". */
-private fun resetAt(epochSec: Long?): String {
-    if (epochSec == null) return "?"
-    val ms = epochSec * 1000
-    val pattern = if (ms - System.currentTimeMillis() < 86_400_000) "HH:mm" else "EEE HH:mm"
-    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(ms))
-}
-
 @Composable
 private fun Bar(label: String, pct: Double, right: String, lvl: String = level(pct, 70.0, 90.0)) {
     Row(
@@ -300,7 +303,7 @@ private fun Bar(label: String, pct: Double, right: String, lvl: String = level(p
         )
         Text(
             text = right,
-            modifier = GlanceModifier.width(104.dp),
+            modifier = GlanceModifier.width(88.dp),
             style = TextStyle(color = cp(TEXT), fontSize = 11.sp, textAlign = TextAlign.End),
             maxLines = 1,
         )

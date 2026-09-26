@@ -1,6 +1,11 @@
 package dev.vpsdash
 
+import android.content.Context
+import android.text.format.DateFormat
+import android.text.format.DateUtils
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 data class Session(
@@ -147,6 +152,13 @@ fun fmtDur(sec: Long): String {
 fun fmtUntil(epochSec: Long): String {
     val left = epochSec - System.currentTimeMillis() / 1000
     return if (left <= 0) "now" else fmtDur(left)
+}
+
+/** "1:10 PM" today, "Sat 2:00 PM" otherwise; follows the phone's 12/24-hour setting. */
+fun fmtClock(ctx: Context, epochSec: Long): String {
+    val ms = epochSec * 1000
+    val time = if (DateFormat.is24HourFormat(ctx)) "HH:mm" else "h:mm a"
+    return SimpleDateFormat(if (DateUtils.isToday(ms)) time else "EEE $time", Locale.getDefault()).format(Date(ms))
 }
 
 fun f0(v: Double) = String.format(Locale.US, "%.0f", v)

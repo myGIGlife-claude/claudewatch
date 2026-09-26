@@ -460,6 +460,7 @@ private fun UsagePanel(u: Usage) {
 
 @Composable
 private fun LimitRow(label: String, l: Limit) {
+    val ctx = LocalContext.current
     val lvl = level(l.pct, 70.0, 90.0)
     val f by animateFloatAsState((l.pct / 100).toFloat().coerceIn(0f, 1f), tween(600), label = label)
     Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -470,7 +471,7 @@ private fun LimitRow(label: String, l: Limit) {
         Meter(f, lvl, Modifier.fillMaxWidth())
         l.resets?.let {
             Text(
-                "Resets in ${fmtUntil(it)}  ·  " + SimpleDateFormat("EEE HH:mm", Locale.getDefault()).format(Date(it * 1000)),
+                "Resets in ${fmtUntil(it)}, at ${fmtClock(ctx, it)}",
                 color = DIM, fontSize = 12.sp, style = NUM,
             )
         }
