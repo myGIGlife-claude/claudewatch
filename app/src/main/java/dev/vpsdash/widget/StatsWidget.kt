@@ -150,7 +150,7 @@ private fun WidgetBody(p: Preferences) {
             Text(text = "●", style = TextStyle(color = cp(dot), fontSize = 13.sp))
             Spacer(modifier = GlanceModifier.width(6.dp))
             Text(
-                text = s?.host ?: "VPS Dash",
+                text = s?.host ?: "ClaudeWatch",
                 modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = cp(TEXT), fontSize = 13.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,

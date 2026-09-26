@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">VPS Dash</string>
-    <string name="widget_name">VPS Health</string>
+    <string name="app_name">ClaudeWatch</string>
+    <string name="widget_name">ClaudeWatch</string>
     <string name="widget_desc">CPU, memory, disk and Claude Code sessions on your VPS</string>
 </resources>

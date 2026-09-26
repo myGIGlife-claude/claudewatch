@@ -44,7 +44,7 @@ object KeyManager {
     fun generate(ctx: Context): String {
         val kp = KeyPair.genKeyPair(JSch(), KeyPair.RSA, 3072)
         val priv = ByteArrayOutputStream().also { kp.writePrivateKey(it) }.toByteArray()
-        val pub = ByteArrayOutputStream().also { kp.writePublicKey(it, "vps-dash@android") }
+        val pub = ByteArrayOutputStream().also { kp.writePublicKey(it, "claudewatch@android") }
             .toString(Charsets.UTF_8.name()).trim()
         kp.dispose()
 
@@ -67,5 +67,5 @@ object KeyManager {
     fun installCommand(pub: String): String =
         "mkdir -p ~/.ssh && chmod 700 ~/.ssh && " +
             "echo 'command=\"/usr/local/bin/claude-dash --json\",restrict $pub' >> ~/.ssh/authorized_keys && " +
-            "chmod 600 ~/.ssh/authorized_keys && echo 'VPS Dash key installed'"
+            "chmod 600 ~/.ssh/authorized_keys && echo 'ClaudeWatch key installed'"
 }
