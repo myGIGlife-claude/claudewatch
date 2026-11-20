@@ -42,6 +42,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     packaging {
         resources { excludes += setOf("META-INF/versions/**", "META-INF/*.kotlin_module") }
     }
@@ -64,4 +65,9 @@ dependencies {
 
     // SSH (maintained JSch fork, supports modern OpenSSH algorithms)
     implementation("com.github.mwiede:jsch:2.28.8")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20250517")
+    testImplementation("org.robolectric:robolectric:4.18.1")
+    testImplementation("androidx.test:core:1.7.0")
 }
