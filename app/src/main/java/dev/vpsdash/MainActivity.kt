@@ -72,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -398,7 +399,7 @@ private fun Dashboard(
         Column(Modifier.weight(1f)) {
             Text(title ?: s?.host ?: "Your VPS", fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                (if (updated > 0) "Updated " + SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(updated)) else "No data yet") +
+                (if (updated > 0) "Updated " + SimpleDateFormat("HH:mm:ss", LocalConfiguration.current.locales[0]).format(Date(updated)) else "No data yet") +
                     (s?.let { "  ·  up ${fmtDur(it.uptime)}" } ?: ""),
                 color = DIM, fontSize = 12.sp, style = NUM,
             )

@@ -174,7 +174,7 @@ private fun WidgetBody(p: Preferences) {
             )
             if (time > 0) {
                 Text(
-                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(time)),
+                    text = SimpleDateFormat("HH:mm", LocalContext.current.resources.configuration.locales[0]).format(Date(time)),
                     style = TextStyle(color = cp(if (err != null || stale) WARN else DIM), fontSize = 11.sp),
                 )
             }
