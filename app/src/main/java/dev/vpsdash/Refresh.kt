@@ -38,11 +38,19 @@ object Refresh {
     }
 
     private suspend fun fetchOne(ctx: Context, cfg: ServerConfig): String? = try {
-        Prefs.saveResult(ctx, cfg.id, SshClient.fetch(ctx, cfg), null)
+        val json = SshClient.fetch(ctx, cfg)
+        if (stillExists(ctx, cfg)) Prefs.saveResult(ctx, cfg.id, json, null)
         null
     } catch (t: Throwable) {
         if (t is CancellationException) throw t
-        SshClient.friendly(t).also { Prefs.saveResult(ctx, cfg.id, null, it) }
+        SshClient.friendly(t).also { if (stillExists(ctx, cfg)) Prefs.saveResult(ctx, cfg.id, null, it) }
+    }
+
+    /** False if the server was deleted while we were fetching (don't resurrect its cache). */
+    private fun stillExists(ctx: Context, cfg: ServerConfig) = Prefs.servers(ctx).any { it.id == cfg.id }
+
+    fun unschedule(ctx: Context) {
+        WorkManager.getInstance(ctx).cancelUniqueWork("vps-refresh")
     }
 
     /** Background refresh every 15 min (Android's minimum for periodic work). */

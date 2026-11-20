@@ -161,4 +161,8 @@ fun fmtClock(ctx: Context, epochSec: Long): String {
     return SimpleDateFormat(if (DateUtils.isToday(ms)) time else "EEE $time", Locale.getDefault()).format(Date(ms))
 }
 
+/** Time of day only, following the phone's 12/24-hour setting. */
+fun fmtHm(ctx: Context, ms: Long): String =
+    SimpleDateFormat(if (DateFormat.is24HourFormat(ctx)) "HH:mm" else "h:mm a", Locale.getDefault()).format(Date(ms))
+
 fun f0(v: Double) = String.format(Locale.US, "%.0f", v)

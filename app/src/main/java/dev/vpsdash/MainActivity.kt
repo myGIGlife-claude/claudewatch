@@ -71,10 +71,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
+import android.content.ClipData
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.semantics.contentDescription
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -168,9 +174,12 @@ class WidgetConfigActivity : ComponentActivity() {
         Prefs.setWidgetServer(this, widgetId, serverId)
         setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
         lifecycleScope.launch {
-            StatsWidget.pushAll(applicationContext)
-            Refresh.now(applicationContext)
-            finish()
+            try {
+                StatsWidget.pushAll(applicationContext)
+                Refresh.now(applicationContext)
+            } finally {
+                finish()
+            }
         }
     }
 }
@@ -189,7 +198,7 @@ fun App(requested: String?) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     var servers by remember { mutableStateOf(Prefs.servers(ctx)) }
-    var selId by remember { mutableStateOf(requested ?: servers.firstOrNull()?.id) }
+    var selId by rememberSaveable { mutableStateOf(requested ?: servers.firstOrNull()?.id) }
     val cfg = servers.find { it.id == selId } ?: servers.firstOrNull()
     var pub by remember { mutableStateOf(KeyManager.publicKey(ctx)) }
     var stats by remember(cfg?.id) { mutableStateOf(cfg?.let { Stats.parseOrNull(Prefs.lastJson(ctx, it.id)) }) }
@@ -198,23 +207,40 @@ fun App(requested: String?) {
     var busy by remember { mutableStateOf(false) }
     var live by remember { mutableStateOf(true) }
     // null = dashboard, "" = adding a server, otherwise the id of the server being edited
-    var setup by remember { mutableStateOf(if (cfg == null || pub == null || stats == null) cfg?.id ?: "" else null) }
+    var setup by rememberSaveable { mutableStateOf(if (cfg == null || pub == null || stats == null) cfg?.id ?: "" else null) }
 
     LaunchedEffect(requested) {
         if (requested != null && servers.any { it.id == requested }) { selId = requested; setup = null }
     }
 
+    // One refresh at a time: a manual tap can't overlap the 5 s poll, and results apply in order.
+    val refreshLock = remember { Mutex() }
+    val curId by rememberUpdatedState(cfg?.id)
     suspend fun refresh(pushWidgets: Boolean = true): Boolean {
         val c = cfg ?: return false
-        busy = true
-        val e = Refresh.fetchAndPublish(ctx, c.id, pushWidgets)
-        error = e
-        if (e == null) {
-            stats = Stats.parseOrNull(Prefs.lastJson(ctx, c.id))
-            updated = Prefs.lastTime(ctx, c.id)
+        return refreshLock.withLock {
+            busy = true
+            try {
+                val e = Refresh.fetchAndPublish(ctx, c.id, pushWidgets)
+                if (curId == c.id) { // user may have switched servers meanwhile
+                    error = e
+                    if (e == null) {
+                        stats = Stats.parseOrNull(Prefs.lastJson(ctx, c.id))
+                        updated = Prefs.lastTime(ctx, c.id)
+                    }
+                }
+                e == null
+            } finally {
+                busy = false
+            }
         }
-        busy = false
-        return e == null
+    }
+
+    val resetKey = {
+        KeyManager.reset(ctx)
+        pub = null
+        error = null
+        setup = cfg?.id ?: ""
     }
 
     // Live polling of the selected server while the app is on screen
@@ -263,6 +289,7 @@ fun App(requested: String?) {
                         }
                     },
                     onTrustNewKey = { existing?.let { Prefs.setFingerprint(ctx, it.id, null) }; error = null },
+                    onResetKey = resetKey,
                     onDelete = existing?.let { e ->
                         {
                             Prefs.deleteServer(ctx, e.id)
@@ -284,6 +311,7 @@ fun App(requested: String?) {
                 onRefresh = { scope.launch { refresh() } },
                 onSetup = { setup = cfg?.id },
                 onTrustNewKey = { cfg?.let { Prefs.setFingerprint(ctx, it.id, null) }; error = null; scope.launch { refresh() } },
+                onResetKey = resetKey,
             )
         }
     }
@@ -305,12 +333,13 @@ private fun ServerTabs(servers: List<ServerConfig>, selected: String?, onSelect:
 private fun SetupScreen(
     cfg: ServerConfig?, pub: String?, busy: Boolean, error: String?,
     onSave: (ServerConfig) -> Unit, onGenerate: () -> Unit, onTest: () -> Unit,
-    onTrustNewKey: () -> Unit, onDelete: (() -> Unit)?, onCancel: (() -> Unit)?,
+    onTrustNewKey: () -> Unit, onResetKey: () -> Unit, onDelete: (() -> Unit)?, onCancel: (() -> Unit)?,
 ) {
-    var name by remember { mutableStateOf(cfg?.name ?: "") }
-    var host by remember { mutableStateOf(cfg?.host ?: "") }
-    var port by remember { mutableStateOf((cfg?.port ?: 22).toString()) }
-    var user by remember { mutableStateOf(cfg?.user ?: "") }
+    var name by rememberSaveable { mutableStateOf(cfg?.name ?: "") }
+    var host by rememberSaveable { mutableStateOf(cfg?.host ?: "") }
+    var port by rememberSaveable { mutableStateOf((cfg?.port ?: 22).toString()) }
+    var user by rememberSaveable { mutableStateOf(cfg?.user ?: "") }
+    val portNum = port.toIntOrNull()?.takeIf { it in 1..65535 }
     val who = cfg?.user ?: "your user"
 
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -324,6 +353,7 @@ private fun SetupScreen(
             OutlinedTextField(user, { user = it.trim() }, label = { Text("Username") }, singleLine = true, modifier = Modifier.weight(2f))
             OutlinedTextField(
                 port, { port = it.filter(Char::isDigit).take(5) }, label = { Text("Port") }, singleLine = true,
+                isError = portNum == null, supportingText = { if (portNum == null) Text("1-65535") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f),
             )
         }
@@ -331,8 +361,8 @@ private fun SetupScreen(
         Text("Use the same user that runs Claude Code, so plan usage and sessions show up.", color = DIM, fontSize = 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { onSave(ServerConfig(cfg?.id ?: ServerConfig.newId(), host, port.toIntOrNull() ?: 22, user, name.trim())) },
-                enabled = host.isNotBlank() && user.isNotBlank(),
+                onClick = { onSave(ServerConfig(cfg?.id ?: ServerConfig.newId(), host, portNum ?: 22, user, name.trim())) },
+                enabled = host.isNotBlank() && user.isNotBlank() && portNum != null,
             ) { Text(if (cfg == null) "Save" else "Update") }
             onDelete?.let { OutlinedButton(onClick = it) { Text("Remove server", color = CRIT) } }
         }
@@ -370,13 +400,14 @@ private fun SetupScreen(
             }
         }
         if (cfg == null) Text("Save the server first.", color = DIM, fontSize = 13.sp)
-        error?.let { ErrorBox(it, onTrustNewKey) }
+        error?.let { ErrorBox(it, onTrustNewKey, onResetKey) }
     }
 }
 
 @Composable
 private fun CommandBox(cmd: String) {
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
     var copied by remember(cmd) { mutableStateOf(false) }
     SelectionContainer {
         Text(
@@ -384,7 +415,10 @@ private fun CommandBox(cmd: String) {
             modifier = Modifier.fillMaxWidth().background(BG, RoundedCornerShape(10.dp)).padding(10.dp),
         )
     }
-    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(cmd)); copied = true }) {
+    OutlinedButton(onClick = {
+        scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("command", cmd))) }
+        copied = true
+    }) {
         Text(if (copied) "Copied" else "Copy command")
     }
 }
@@ -393,7 +427,7 @@ private fun CommandBox(cmd: String) {
 @Composable
 private fun Dashboard(
     s: Stats?, title: String?, user: String, updated: Long, error: String?, busy: Boolean, live: Boolean,
-    onLive: (Boolean) -> Unit, onRefresh: () -> Unit, onSetup: () -> Unit, onTrustNewKey: () -> Unit,
+    onLive: (Boolean) -> Unit, onRefresh: () -> Unit, onSetup: () -> Unit, onTrustNewKey: () -> Unit, onResetKey: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -416,10 +450,13 @@ private fun Dashboard(
         s?.let { StatusPill(it) }
         Spacer(Modifier.weight(1f))
         Text("Live", fontSize = 13.sp, color = DIM)
-        Switch(checked = live, onCheckedChange = onLive, modifier = Modifier.padding(start = 8.dp))
+        Switch(
+            checked = live, onCheckedChange = onLive,
+            modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = "Live updates" },
+        )
     }
 
-    error?.let { ErrorBox(it, onTrustNewKey) }
+    error?.let { ErrorBox(it, onTrustNewKey, onResetKey) }
     if (s == null) return
 
     // At-a-glance gauges
@@ -495,7 +532,7 @@ private fun Dashboard(
         Stat("open files ${s.fds}  ·  inotify ${s.inotify}/${s.inotifyMax}",
             level(pct(s.inotify.toLong(), s.inotifyMax.toLong()), 60.0, 80.0))
         Stat("earlyoom ${s.earlyoom}  ·  kills 24h ${s.oomKills ?: "?"}",
-            if (s.earlyoom != "active" || (s.oomKills ?: 0) > 0) "warn" else "ok")
+            if (s.earlyoom !in listOf("active", "not installed", "?") || (s.oomKills ?: 0) > 0) "warn" else "ok")
         Stat("failed units ${s.failedUnits ?: "?"}", if ((s.failedUnits ?: 0) > 0) "warn" else "ok")
     }
     Spacer(Modifier.height(24.dp))
@@ -562,7 +599,9 @@ private fun Gauge(label: String, pct: Double, sub: String, lvl: String, modifier
 @Composable
 private fun CoreBars(cores: List<Double>) {
     Row(
-        Modifier.fillMaxWidth().height(44.dp).semantics(mergeDescendants = true) {},
+        Modifier.fillMaxWidth().height(44.dp).semantics {
+            contentDescription = "CPU cores: " + cores.mapIndexed { i, c -> "core ${i + 1} ${f0(c)}%" }.joinToString(", ")
+        },
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         cores.forEach { c ->
@@ -645,7 +684,7 @@ private fun AlertRow(a: Alert) {
 }
 
 @Composable
-private fun ErrorBox(msg: String, onTrustNewKey: () -> Unit) {
+private fun ErrorBox(msg: String, onTrustNewKey: () -> Unit, onResetKey: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().background(CRIT.copy(alpha = 0.14f), RoundedCornerShape(12.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -653,6 +692,9 @@ private fun ErrorBox(msg: String, onTrustNewKey: () -> Unit) {
         Text(msg, color = CRIT, fontSize = 13.sp)
         if (msg.contains("host key changed", ignoreCase = true)) {
             OutlinedButton(onClick = onTrustNewKey) { Text("Trust new host key") }
+        }
+        if (msg.contains(KeyManager.KEY_LOST_MARK)) {
+            OutlinedButton(onClick = onResetKey) { Text("Generate new key") }
         }
     }
 }

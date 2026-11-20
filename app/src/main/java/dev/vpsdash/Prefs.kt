@@ -36,6 +36,8 @@ object Prefs {
         val e = sp(c).edit().putString("servers", toJson(next))
         // New address => forget the old host key fingerprint
         if (old == null || old.host != cfg.host || old.port != cfg.port) e.remove("fp_${cfg.id}")
+        // ...and the cached result, which belonged to the old address
+        if (old != null && (old.host != cfg.host || old.port != cfg.port)) listOf("json_", "time_", "error_").forEach { e.remove(it + cfg.id) }
         e.apply()
     }
 
@@ -52,6 +54,7 @@ object Prefs {
     }).toString()
 
     /** v1.0-1.5 stored a single server in flat keys; move it into the list. */
+    @Synchronized
     private fun migrate(c: Context) {
         val p = sp(c)
         if (p.contains("servers") || !p.contains("host")) return
