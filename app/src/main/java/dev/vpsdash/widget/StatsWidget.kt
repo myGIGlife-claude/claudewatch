@@ -130,6 +130,11 @@ class StatsWidgetReceiver : GlanceAppWidgetReceiver() {
         Refresh.schedule(context)
     }
 
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        appWidgetIds.forEach { Prefs.removeWidget(context, it) }
+    }
+
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
         Refresh.now(context) // fill a freshly placed widget right away

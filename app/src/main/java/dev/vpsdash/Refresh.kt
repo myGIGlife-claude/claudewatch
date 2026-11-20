@@ -11,6 +11,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dev.vpsdash.widget.StatsWidget
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -40,6 +41,7 @@ object Refresh {
         Prefs.saveResult(ctx, cfg.id, SshClient.fetch(ctx, cfg), null)
         null
     } catch (t: Throwable) {
+        if (t is CancellationException) throw t
         SshClient.friendly(t).also { Prefs.saveResult(ctx, cfg.id, null, it) }
     }
 
