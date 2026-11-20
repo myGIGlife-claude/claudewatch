@@ -102,10 +102,10 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability, and [PRIVACY.md](PRIVA
 
 ## Build from source
 
-You need JDK 17 and Gradle 8.11+.
+You need JDK 17 or newer and the Android SDK (platform 37). The Gradle wrapper downloads Gradle itself.
 
 ```sh
-gradle assembleRelease
+./gradlew assembleRelease
 # app/build/outputs/apk/release/app-release.apk (signed with the debug key unless KEYSTORE_FILE is set)
 ```
 
