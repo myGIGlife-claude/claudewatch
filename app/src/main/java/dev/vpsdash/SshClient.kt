@@ -12,6 +12,8 @@ class HostKeyChangedException(val expected: String, val actual: String) :
 
 object SshClient {
     private const val CMD = "/usr/local/bin/claude-dash --json"
+    private const val LEGACY_HOST_KEYS =
+        "ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256"
 
     suspend fun fetch(ctx: Context, cfg: ServerConfig): String = withContext(Dispatchers.IO) {
         val jsch = JSch()
@@ -21,6 +23,8 @@ object SshClient {
         // We verify the host key ourselves below (trust-on-first-use, then pinned).
         session.setConfig("StrictHostKeyChecking", "no")
         session.setConfig("PreferredAuthentications", "publickey")
+        // JSch 0.2.21 (pre-upgrade) offered no certificate host-key types first; keep that so pinned fingerprints still match.
+        session.setConfig("server_host_key", LEGACY_HOST_KEYS)
         session.timeout = 20_000
         session.connect(15_000)
         try {
@@ -42,10 +46,7 @@ object SshClient {
 
             if (!out.trimStart().startsWith("{")) {
                 val msg = err.toString().ifBlank { out }.take(300)
-                throw IllegalStateException(
-                    if (msg.contains("not found")) "claude-dash isn't installed at /usr/local/bin on the VPS"
-                    else "Unexpected reply from server: $msg"
-                )
+                throw IllegalStateException(badReply(msg))
             }
             out
         } finally {
@@ -53,11 +54,15 @@ object SshClient {
         }
     }
 
+    internal fun badReply(msg: String) =
+        if (msg.contains("not found", true) || msg.contains("No such file", true)) "claude-dash isn't installed at /usr/local/bin on the VPS"
+        else "Unexpected reply from server: $msg"
+
     /** Turns JSch's terse errors into something readable. */
     fun friendly(t: Throwable): String {
         val m = t.message ?: t.javaClass.simpleName
         return when {
-            t is HostKeyChangedException -> m
+            t is HostKeyChangedException || t is KeyLostException -> m
             m.contains("Auth fail", true) -> "Key rejected - make sure you ran the install command on the VPS as the same user"
             m.contains("timeout", true) || m.contains("timed out", true) -> "Connection timed out - check host/port and that the VPS is up"
             m.contains("UnknownHost", true) || t is java.net.UnknownHostException -> "Can't resolve host name"

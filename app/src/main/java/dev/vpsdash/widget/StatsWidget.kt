@@ -49,10 +49,13 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.LocalContext
 import dev.vpsdash.Limit
 import dev.vpsdash.MainActivity
 import dev.vpsdash.fmtClock
+import dev.vpsdash.fmtHm
 import dev.vpsdash.Prefs
 import dev.vpsdash.R
 import dev.vpsdash.Refresh
@@ -60,8 +63,6 @@ import dev.vpsdash.Stats
 import dev.vpsdash.f0
 import dev.vpsdash.fmtBytes
 import dev.vpsdash.level
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 private val KEY_JSON = stringPreferencesKey("json")
@@ -130,6 +131,16 @@ class StatsWidgetReceiver : GlanceAppWidgetReceiver() {
         Refresh.schedule(context)
     }
 
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context) // last widget removed: stop polling in the background
+        Refresh.unschedule(context)
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        appWidgetIds.forEach { Prefs.removeWidget(context, it) }
+    }
+
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
         Refresh.now(context) // fill a freshly placed widget right away
@@ -159,7 +170,14 @@ private fun WidgetBody(p: Preferences) {
                 err != null || stale -> WARN
                 else -> lvlColor(s.health)
             }
-            Box(modifier = GlanceModifier.size(8.dp).background(dot).cornerRadius(4.dp)) {}
+            val dotText = when {
+                s == null -> "Status unknown"
+                err != null -> "Status: last refresh failed"
+                stale -> "Status: data is old"
+                else -> when (s.health) { "crit" -> "Status: critical"; "warn" -> "Status: warning"; else -> "Status: healthy" }
+            }
+            Box(modifier = GlanceModifier.size(8.dp).background(dot).cornerRadius(4.dp)
+                .semantics { contentDescription = dotText }) {}
             Spacer(modifier = GlanceModifier.width(8.dp))
             Text(
                 text = p[KEY_NAME]?.ifBlank { null } ?: s?.host ?: "ClaudeWatch",
@@ -169,14 +187,14 @@ private fun WidgetBody(p: Preferences) {
             )
             if (time > 0) {
                 Text(
-                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(time)),
+                    text = fmtHm(LocalContext.current, time),
                     style = TextStyle(color = cp(if (err != null || stale) WARN else DIM), fontSize = 11.sp),
                 )
             }
             Image(
                 provider = ImageProvider(R.drawable.ic_refresh),
                 contentDescription = "Refresh",
-                modifier = GlanceModifier.size(36.dp).padding(8.dp)
+                modifier = GlanceModifier.size(48.dp).padding(14.dp)
                     .clickable(actionRunCallback<RefreshAction>()),
             )
         }
@@ -222,6 +240,13 @@ private fun WidgetBody(p: Preferences) {
                 if (u.session != null && u.week != null) Spacer(modifier = GlanceModifier.width(6.dp))
                 u.week?.let { Tile("WEEKLY", it.pct, resets(it), level(it.pct, 70.0, 90.0), compact, GlanceModifier.defaultWeight()) }
             }
+        } else if (u?.error != null) {
+            Text(
+                text = u.error,
+                modifier = GlanceModifier.padding(top = 6.dp),
+                style = TextStyle(color = cp(WARN), fontSize = 11.sp),
+                maxLines = 2,
+            )
         }
 
         // Claude + API

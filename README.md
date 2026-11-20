@@ -50,7 +50,7 @@ The app walks you through this and gives you each command with a **Copy** button
 1. **Server**: enter the host, username and port (and a name if you like), then tap **Save**. Use the same user that runs Claude Code.
 2. **Install the server script**: SSH into the server as that user and paste the command. It downloads `claude-dash` from this repo and installs it to `/usr/local/bin`, which needs `sudo` once:
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/myGIGlife-claude/claudewatch/main/server/claude-dash.py -o /tmp/claude-dash && sudo install -m 755 /tmp/claude-dash /usr/local/bin/claude-dash && rm /tmp/claude-dash && claude-dash --json > /dev/null && echo 'ClaudeWatch server script installed'
+   t=$(mktemp) && { curl -fsSL https://raw.githubusercontent.com/myGIGlife-claude/claudewatch/main/server/claude-dash.py -o "$t" && sudo install -m 755 "$t" /usr/local/bin/claude-dash; r=$?; rm -f "$t"; [ $r -eq 0 ]; } && claude-dash --json > /dev/null && echo 'ClaudeWatch server script installed'
    ```
 3. **Authorize this phone**: tap **Generate key** (only the first time; one key covers all your servers), then copy the command and paste it on the server. It adds the key to `~/.ssh/authorized_keys`, locked to `claude-dash --json`. Pasting it again is safe.
 4. **Connect**.
@@ -102,10 +102,10 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability, and [PRIVACY.md](PRIVA
 
 ## Build from source
 
-You need JDK 17 and Gradle 8.11+.
+You need JDK 17 or newer and the Android SDK (platform 37). The Gradle wrapper downloads Gradle itself.
 
 ```sh
-gradle assembleRelease
+./gradlew assembleRelease
 # app/build/outputs/apk/release/app-release.apk (signed with the debug key unless KEYSTORE_FILE is set)
 ```
 

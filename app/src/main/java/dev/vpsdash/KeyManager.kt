@@ -9,6 +9,8 @@ import com.jcraft.jsch.JSch
 import com.jcraft.jsch.KeyPair
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -23,7 +25,12 @@ import javax.crypto.spec.GCMParameterSpec
  * stored encrypted with an AES key that lives in the Android Keystore (hardware-backed
  * on most phones).
  */
+class KeyLostException : Exception("The saved SSH key can't be unlocked on this phone. Generate a new key and run its install command on the server again.")
+
 object KeyManager {
+    /** Text the UI looks for to offer "Generate new key". */
+    const val KEY_LOST_MARK = "can't be unlocked"
+
     private const val ALIAS = "vpsdash_wrap"
     private const val PRIV = "ssh_key.enc"
     private const val PUB = "ssh_key.pub"
@@ -76,11 +83,24 @@ object KeyManager {
         return pub
     }
 
-    fun privateKey(ctx: Context): ByteArray {
+    /** Called off the main thread. Throws [KeyLostException] if the saved key can't be decrypted
+     *  (e.g. the Keystore wrap key was lost after a lock-screen change or restore). */
+    fun privateKey(ctx: Context): ByteArray = try {
         val blob = File(ctx.filesDir, PRIV).readBytes()
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, blob, 0, 12))
-        return c.doFinal(blob, 12, blob.size - 12)
+        c.doFinal(blob, 12, blob.size - 12)
+    } catch (e: GeneralSecurityException) {
+        throw KeyLostException()
+    } catch (e: IOException) {
+        throw KeyLostException()
+    }
+
+    /** Forgets the unusable key so the user can generate a new one (then re-run the install command). */
+    fun reset(ctx: Context) {
+        File(ctx.filesDir, PRIV).delete()
+        File(ctx.filesDir, PUB).delete()
+        runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS) }
     }
 
     /** One-liner to paste on the VPS. The key is locked to a single read-only command.
@@ -88,15 +108,16 @@ object KeyManager {
     fun installCommand(pub: String): String {
         val tail = pub.split(" ").getOrElse(1) { pub }.takeLast(40)
         return "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && " +
-            "{ grep -vF '$tail' ~/.ssh/authorized_keys > ~/.ssh/ak.tmp; mv ~/.ssh/ak.tmp ~/.ssh/authorized_keys; } && " +
+            "{ grep -vF '$tail' ~/.ssh/authorized_keys > ~/.ssh/ak.tmp || [ \$? -eq 1 ]; } && " +
+            "mv ~/.ssh/ak.tmp ~/.ssh/authorized_keys && " +
             "echo 'command=\"/usr/local/bin/claude-dash --json\",restrict $pub' >> ~/.ssh/authorized_keys && " +
             "chmod 600 ~/.ssh/authorized_keys && echo 'ClaudeWatch key installed'"
     }
 
     /** Downloads and installs the server script from GitHub. */
     const val SERVER_INSTALL =
-        "curl -fsSL https://raw.githubusercontent.com/myGIGlife-claude/claudewatch/main/server/claude-dash.py -o /tmp/claude-dash && " +
-            "sudo install -m 755 /tmp/claude-dash /usr/local/bin/claude-dash && rm /tmp/claude-dash && " +
+        "t=\$(mktemp) && { curl -fsSL https://raw.githubusercontent.com/myGIGlife-claude/claudewatch/main/server/claude-dash.py -o \"\$t\" && " +
+            "sudo install -m 755 \"\$t\" /usr/local/bin/claude-dash; r=\$?; rm -f \"\$t\"; [ \$r -eq 0 ]; } && " +
             "claude-dash --json > /dev/null && echo 'ClaudeWatch server script installed'"
 
     /** Prints just the plan-usage part of the script's output. */

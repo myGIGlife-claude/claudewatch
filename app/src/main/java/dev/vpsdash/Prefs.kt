@@ -36,12 +36,16 @@ object Prefs {
         val e = sp(c).edit().putString("servers", toJson(next))
         // New address => forget the old host key fingerprint
         if (old == null || old.host != cfg.host || old.port != cfg.port) e.remove("fp_${cfg.id}")
+        // ...and the cached result, which belonged to the old address
+        if (old != null && (old.host != cfg.host || old.port != cfg.port)) listOf("json_", "time_", "error_").forEach { e.remove(it + cfg.id) }
         e.apply()
     }
 
     fun deleteServer(c: Context, id: String) {
         val e = sp(c).edit().putString("servers", toJson(servers(c).filter { it.id != id }))
         listOf("fp_", "json_", "time_", "error_").forEach { e.remove(it + id) }
+        // Widgets on this server fall back to the first server
+        sp(c).all.filter { it.key.startsWith("widget_") && it.value == id }.keys.forEach { e.remove(it) }
         e.apply()
     }
 
@@ -50,6 +54,7 @@ object Prefs {
     }).toString()
 
     /** v1.0-1.5 stored a single server in flat keys; move it into the list. */
+    @Synchronized
     private fun migrate(c: Context) {
         val p = sp(c)
         if (p.contains("servers") || !p.contains("host")) return
@@ -80,6 +85,8 @@ object Prefs {
     fun lastError(c: Context, id: String): String? = sp(c).getString("error_$id", null)
 
     fun widgetServer(c: Context, appWidgetId: Int): String? = sp(c).getString("widget_$appWidgetId", null)
+    fun removeWidget(c: Context, appWidgetId: Int) = sp(c).edit().remove("widget_$appWidgetId").apply()
+
     fun setWidgetServer(c: Context, appWidgetId: Int, serverId: String) {
         sp(c).edit().putString("widget_$appWidgetId", serverId).apply()
     }

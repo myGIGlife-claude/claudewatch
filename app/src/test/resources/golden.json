@@ -1,0 +1,110 @@
+{
+ "host": "test-host",
+ "ts": 1795216516,
+ "uptime": 101845,
+ "load": [
+  8.4,
+  8.25,
+  8.16
+ ],
+ "cpu": {
+  "busy": 35.3,
+  "usr": 27.6,
+  "sys": 5.5,
+  "iowait": 0.7,
+  "steal": 2.2,
+  "cores": [
+   52.4,
+   19.4,
+   53.8,
+   50.0,
+   15.7,
+   50.0,
+   20.4,
+   19.2
+  ]
+ },
+ "mem": {
+  "total": 33257996288,
+  "avail": 9839648768,
+  "used": 23418347520
+ },
+ "zram": {
+  "total": 16628994048,
+  "used": 12109385728,
+  "ratio": 3.55
+ },
+ "swap": {
+  "total": 4294963200,
+  "used": 141459456
+ },
+ "psi": {
+  "cpu": 4.17,
+  "mem": 0.0,
+  "io": 0.0
+ },
+ "disk": {
+  "total": 664550739968,
+  "used": 237297852416,
+  "read": 170071.2,
+  "write": 2171373.7
+ },
+ "net": {
+  "rx": 26023.2,
+  "tx": 13996.5
+ },
+ "api": {
+  "ok": true,
+  "tcp_ms": 1.8,
+  "dns_ms": 1.0
+ },
+ "claude": {
+  "version": "2.0.0",
+  "sessions": [
+   {
+    "pid": 1083,
+    "cpu": 1.0,
+    "rss": 322555904,
+    "child_rss": 98516992,
+    "mcp": 12,
+    "age": 101837,
+    "cwd": "~/projects/demo"
+   },
+   {
+    "pid": 1366,
+    "cpu": 0.0,
+    "rss": 453537792,
+    "child_rss": 110776320,
+    "mcp": 12,
+    "age": 101835,
+    "cwd": "~/projects/demo"
+   }
+  ]
+ },
+ "sys": {
+  "procs": 658,
+  "zombies": 0,
+  "fds": 13265,
+  "inotify": 4093,
+  "inotify_max": 1048576,
+  "earlyoom": "active",
+  "oom_kills": null,
+  "failed_units": 1
+ },
+ "usage": {
+  "session": {
+   "pct": 41.5,
+   "resets": 1790434800
+  },
+  "week": {
+   "pct": 12.0,
+   "resets": 1790758800
+  }
+ },
+ "alerts": [
+  {
+   "level": "warn",
+   "msg": "Disk 85% full"
+  }
+ ]
+}
