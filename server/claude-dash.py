@@ -10,7 +10,7 @@ Zero dependencies (Python 3 stdlib only). Reads straight from /proc and /sys.
 
 Install:  sudo install -m 755 claude-dash.py /usr/local/bin/claude-dash
 """
-import argparse, curses, json, os, shutil, socket, subprocess, sys, threading, time, urllib.request
+import argparse, json, os, re, shutil, socket, subprocess, sys, threading, time, urllib.request
 from datetime import datetime
 
 CLK = os.sysconf("SC_CLK_TCK")
@@ -68,7 +68,8 @@ def cpu_times():
     for line in read("/proc/stat").splitlines():
         if line.startswith("cpu"):
             p = line.split()
-            out[p[0]] = [int(x) for x in p[1:9]]  # user nice sys idle iowait irq softirq steal
+            v = [int(x) for x in p[1:9]]  # user nice sys idle iowait irq softirq steal
+            out[p[0]] = v + [0] * (8 - len(v))
     return out
 
 
@@ -76,7 +77,12 @@ def meminfo():
     m = {}
     for line in read("/proc/meminfo").splitlines():
         k, v = line.split(":", 1)
-        m[k] = int(v.split()[0]) * 1024
+        try:
+            m[k] = int(v.split()[0]) * 1024
+        except (IndexError, ValueError):
+            pass
+    m.setdefault("MemTotal", 0)
+    m.setdefault("MemAvailable", m.get("MemFree", 0))
     return m
 
 
@@ -193,7 +199,9 @@ def inotify_usage():
 
 def _epoch(iso):
     try:
-        return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+        # py3.8-3.10 fromisoformat only takes 3 or 6 fraction digits: pad/trim to 6
+        iso = re.sub(r"\.(\d+)", lambda m: "." + (m.group(1) + "000000")[:6], iso.replace("Z", "+00:00"))
+        return int(datetime.fromisoformat(iso).timestamp())
     except Exception:
         return None
 
@@ -229,7 +237,11 @@ def claude_usage(max_age=60):
         "Authorization": f"Bearer {tok}", "anthropic-beta": "oauth-2025-04-20", "User-Agent": "claude-dash"})
     try:
         with urllib.request.urlopen(req, timeout=6) as r:
-            u = parse_usage(json.load(r))
+            body = r.read()
+        try:
+            u = parse_usage(json.loads(body))
+        except Exception:
+            u = {"error": "Unexpected usage API reply format"}
     except urllib.error.HTTPError as e:
         u = {"error": "Login expired - run claude on the server once" if e.code == 401 else f"Usage API error {e.code}"}
     except Exception:
@@ -274,11 +286,15 @@ class SlowChecks(threading.Thread):
                 self.d["version"] = run([claude_bin, "--version"]).strip().split(" ")[0]
         ok, dns, tcp = self.probe_api()
         self.d.update(api=ok, dns_ms=dns, tcp_ms=tcp)
-        self.d["earlyoom"] = run(["systemctl", "is-active", "earlyoom"]).strip() or "?"
-        failed = run(["systemctl", "--failed", "--no-legend", "--plain"])
-        self.d["failed"] = len([l for l in failed.splitlines() if l.strip()])
-        j = run(["journalctl", "-u", "earlyoom", "--since", "-24h", "--no-pager", "-q"], timeout=8)
-        self.d["oom_kills"] = j.count("sending SIG") if j or self.d["oom_kills"] is None else self.d["oom_kills"]
+        if shutil.which("systemctl"):
+            known = run(["systemctl", "list-unit-files", "earlyoom.service", "--no-legend"]).strip()
+            self.d["earlyoom"] = (run(["systemctl", "is-active", "earlyoom"]).strip() or "?") if known else "not installed"
+            failed = run(["systemctl", "--failed", "--no-legend", "--plain"])
+            self.d["failed"] = len([l for l in failed.splitlines() if l.strip()])
+        if shutil.which("journalctl"):
+            j = run(["journalctl", "-u", "earlyoom", "--since", "-24h", "--no-pager", "-q"], timeout=8)
+            if j:  # empty = no access or no log: stay unknown (None) rather than a false 0
+                self.d["oom_kills"] = j.count("sending SIG")
         self.d["inotify"] = inotify_usage()
         if usage:
             self.d["usage"] = claude_usage()
@@ -297,7 +313,8 @@ class Sampler:
         self.cpu = cpu_times()
         self.dio = diskio()
         self.nio = netio()
-        self.ticks = {}
+        # seed so the first sample already has a per-process delta
+        self.ticks = {pid: p["ticks"] for pid, p in scan_procs().items()}
 
     def sample(self):
         now = time.time()
@@ -316,7 +333,7 @@ class Sampler:
             return (100 * (tot - idle) / tot, 100 * (d[0] + d[1]) / tot,
                     100 * (d[2] + d[5] + d[6]) / tot, 100 * d[4] / tot, 100 * d[7] / tot)
         s["cpu"] = pct("cpu")
-        s["cores"] = [pct(f"cpu{i}")[0] for i in range(NCPU)]
+        s["cores"] = [pct(k)[0] for k in sorted((k for k in cur if k[3:].isdigit()), key=lambda k: int(k[3:]))]
         self.cpu = cur
 
         # Memory / swap / pressure
@@ -330,12 +347,12 @@ class Sampler:
         st = os.statvfs("/")
         s["disk"] = (st.f_blocks * st.f_frsize, (st.f_blocks - st.f_bfree) * st.f_frsize)
         d = diskio()
-        s["dio"] = ((d[0] - self.dio[0]) / dt, (d[1] - self.dio[1]) / dt)
+        s["dio"] = (max(0, d[0] - self.dio[0]) / dt, max(0, d[1] - self.dio[1]) / dt)
         self.dio = d
 
         # Network
         n = netio()
-        s["nio"] = ((n[0] - self.nio[0]) / dt, (n[1] - self.nio[1]) / dt)
+        s["nio"] = (max(0, n[0] - self.nio[0]) / dt, max(0, n[1] - self.nio[1]) / dt)
         self.nio = n
 
         # Kernel tables
@@ -407,7 +424,7 @@ class Sampler:
 def health(s, slow):
     a = []
     m = s["mem"]
-    avail = 100 * m["MemAvailable"] / m["MemTotal"]
+    avail = 100 * m["MemAvailable"] / (m["MemTotal"] or 1)
     if avail < 15:
         a.append((lvl(-avail, -15, -8), f"Low RAM: {avail:.0f}% available"))
     p = s["psi"]
@@ -436,7 +453,7 @@ def health(s, slow):
             a.append(("crit", f"Cannot reach {API_HOST}"))
         elif slow["tcp_ms"] and slow["tcp_ms"] > 300:
             a.append(("warn", f"Slow API connect: {slow['tcp_ms']:.0f}ms"))
-        if slow["earlyoom"] != "active":
+        if slow["earlyoom"] not in ("active", "not installed", "?"):
             a.append(("warn", f"earlyoom is {slow['earlyoom']}"))
         if slow["oom_kills"]:
             a.append(("warn", f"earlyoom killed {slow['oom_kills']} process(es) in 24h"))
@@ -495,7 +512,7 @@ def build(s, slow, width, interval):
     # Memory
     m = s["mem"]
     tot, av = m["MemTotal"], m["MemAvailable"]
-    L.append(bar("MEM", 100 * (tot - av) / tot, width, f"{fb(tot - av)}/{fb(tot)}"))
+    L.append(bar("MEM", 100 * (tot - av) / (tot or 1), width, f"{fb(tot - av)}/{fb(tot)}"))
     cache = m.get("Cached", 0) + m.get("Buffers", 0) + m.get("SReclaimable", 0)
     L.append([("      avail ", "dim"), (fb(av), "norm"), ("  cache ", "dim"), (fb(cache), "norm"),
               ("  dirty ", "dim"), (fb(m.get("Dirty", 0)), "norm")])
@@ -593,6 +610,7 @@ def build(s, slow, width, interval):
 
 # ---------------- renderers ----------------
 def run_curses(stdscr, interval):
+    import curses
     curses.curs_set(0)
     curses.use_default_colors()
     colors = {"ok": curses.COLOR_GREEN, "warn": curses.COLOR_YELLOW, "crit": curses.COLOR_RED,
@@ -692,6 +710,8 @@ def run_json():
     time.sleep(1)
     t.join(10)
     tu.join(max(0.0, 10 - (time.time() - t0)))
+    if tu.is_alive() and slow.d.get("usage") is None:
+        slow.d["usage"] = {"error": "Usage check timed out"}
     print(json.dumps(to_json(sampler.sample(), slow.d), separators=(",", ":")))
 
 
@@ -713,6 +733,7 @@ def main():
         run_once(shutil.get_terminal_size((80, 24)).columns)
     else:
         os.environ.setdefault("ESCDELAY", "25")
+        import curses
         curses.wrapper(run_curses, a.interval)
 
 
