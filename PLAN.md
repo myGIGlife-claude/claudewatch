@@ -4,7 +4,7 @@ Last updated: 2026-11-20 23:30 UTC
 ClaudeWatch: Android app + Glance widget that shows a Claude Code VPS's health and plan usage over a locked-down SSH key. Sideloaded from GitHub Releases (v1.7, versionCode 8). Keep it small, safe and current.
 
 ## Current task
-Tasks 1-6 done on `upgrade-2026-11`; merging and releasing v1.8 (task 7). Next after release: phone check that SSH + widget work in the R8 build (no emulator here: no KVM).
+v1.8 released (GitHub release v1.8, PR #1 merged). Next: owner checks on the phone that SSH, dashboard and widget work in the R8 build, and re-runs the server install command to get the new claude-dash.
 
 ## Tasks
 Model per task follows the 2026-11-16 model rules (cheapest tier that does it reliably).
@@ -15,7 +15,7 @@ Model per task follows the 2026-11-16 model rules (cheapest tier that does it re
 - [x] 4. Toolchain upgrade to targetSdk 36 / compileSdk 37: AGP 8.7.3 → 9.x (built-in Kotlin, drop `kotlin.android` plugin and `kotlinOptions`), Kotlin 2.1 → 2.4.x, Gradle 8.11 → 9.x in CI, Compose BOM 2026.09.00, WorkManager/Glance/DataStore/Lifecycle/Activity/JSch to current stable; add a Gradle wrapper. Check predictive back, edge-to-edge and large-screen behavior at 36. **Opus** (system-wide build change, many breaking-change risks; route to a cluster worker if one is attached). Done when: CI builds a signed APK, it installs over v1.7 on a phone (same key), widget and dashboard work.
 - [x] 5. Release hardening: enable R8 (`isMinifyEnabled`, `isShrinkResources`) with keep rules for JSch; add a network security config (cleartext off). **Sonnet** (needs testing that SSH still works after shrinking). Depends on 4. Done when: release APK connects and refreshes on a real server.
 - [x] 6. Android unit tests: JVM tests for `Stats.kt` JSON parsing (against a fixture captured from `claude-dash --json`) and `Prefs` migration; run `testDebugUnitTest` in CI. **Sonnet**. Done when: CI runs and passes the tests.
-- [ ] 7. Release v1.8 (bump versionCode 9 / versionName 1.8, GitHub release with APK). **This session**. Depends on 1-6. Done when: release page has the APK and it updates in place.
+- [x] 7. Release v1.8 (bump versionCode 9 / versionName 1.8, GitHub release with APK). **This session**. Depends on 1-6. Done when: release page has the APK and it updates in place.
 - [ ] 8. Developer verification for sideloaded APKs (global rollout 2027+): register package `life.mygig.cdash` + signing key. **Owner** (account action). QUESTION for later, not blocking.
 
 ## Decisions
