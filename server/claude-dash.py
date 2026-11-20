@@ -55,9 +55,10 @@ def lvl(v, warn, crit):
     return "crit" if v >= crit else "warn" if v >= warn else "ok"
 
 
-def run(cmd, timeout=5):
+def run(cmd, timeout=5, stderr=False):
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.stdout + r.stderr if stderr else r.stdout
     except Exception:
         return ""
 
@@ -292,8 +293,9 @@ class SlowChecks(threading.Thread):
             failed = run(["systemctl", "--failed", "--no-legend", "--plain"])
             self.d["failed"] = len([l for l in failed.splitlines() if l.strip()])
         if shutil.which("journalctl"):
-            j = run(["journalctl", "-u", "earlyoom", "--since", "-24h", "--no-pager", "-q"], timeout=8)
-            if j:  # empty = no access or no log: stay unknown (None) rather than a false 0
+            j = run(["journalctl", "-u", "earlyoom", "--since", "-24h", "--no-pager"], timeout=8, stderr=True)
+            # Without -q, journalctl warns when we can't see system logs: then stay unknown, not a false 0
+            if j and "not seeing messages" not in j:
                 self.d["oom_kills"] = j.count("sending SIG")
         self.d["inotify"] = inotify_usage()
         if usage:
