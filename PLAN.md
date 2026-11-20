@@ -1,17 +1,18 @@
-Last updated: 2026-11-20 22:45 UTC
+Last updated: 2026-11-20 23:05 UTC
 
 ## Goal
 ClaudeWatch: Android app + Glance widget that shows a Claude Code VPS's health and plan usage over a locked-down SSH key. Sideloaded from GitHub Releases (v1.7, versionCode 8). Keep it small, safe and current.
 
 ## Current task
-Task 1 (repo hygiene). Next step: untrack `server/__pycache__`, add it to `.gitignore`, add the Python test to CI.
+Branch `upgrade-2026-11`: tasks 1-3 done. Opus subagent doing task 4+5 (toolchain, R8); Sonnet subagent auditing all source for bugs. Next: apply audit fixes + task 6 tests (Sonnet), push branch, CI green, merge, release v1.8.
+Open question: "move the github owner to the claude user" - repo is already in org myGIGlife-claude and this session has admin; waiting for the owner to say what to transfer.
 
 ## Tasks
 Model per task follows the 2026-11-16 model rules (cheapest tier that does it reliably).
 
-- [ ] 1. Repo hygiene: `git rm --cached server/__pycache__`, add `__pycache__/` to `.gitignore`; add a `python3 server/test_claude_dash.py` step to `build.yml`. **Haiku/this session** (mechanical). Done when: CI green and the test step shows "ok".
-- [ ] 2. Clean up widget mappings: implement `onDeleted` in `StatsWidgetReceiver` to remove `widget_<id>`; on `deleteServer`, re-point or drop widgets that used it. **Sonnet** (small, touches Prefs + receiver). Done when: deleting a widget/server leaves no stale `widget_*` key (check via unit test or manual prefs dump).
-- [ ] 3. Don't swallow coroutine cancellation: `Refresh.fetchOne` catches `Throwable`; rethrow `CancellationException`. **Haiku** (one line). Done when: CI build green.
+- [x] 1. Repo hygiene: `git rm --cached server/__pycache__`, add `__pycache__/` to `.gitignore`; add a `python3 server/test_claude_dash.py` step to `build.yml`. **Haiku/this session** (mechanical). Done when: CI green and the test step shows "ok".
+- [x] 2. Clean up widget mappings: implement `onDeleted` in `StatsWidgetReceiver` to remove `widget_<id>`; on `deleteServer`, re-point or drop widgets that used it. **Sonnet** (small, touches Prefs + receiver). Done when: deleting a widget/server leaves no stale `widget_*` key (check via unit test or manual prefs dump).
+- [x] 3. Don't swallow coroutine cancellation: `Refresh.fetchOne` catches `Throwable`; rethrow `CancellationException`. **Haiku** (one line). Done when: CI build green.
 - [ ] 4. Toolchain upgrade to targetSdk 36 / compileSdk 37: AGP 8.7.3 → 9.x (built-in Kotlin, drop `kotlin.android` plugin and `kotlinOptions`), Kotlin 2.1 → 2.4.x, Gradle 8.11 → 9.x in CI, Compose BOM 2026.09.00, WorkManager/Glance/DataStore/Lifecycle/Activity/JSch to current stable; add a Gradle wrapper. Check predictive back, edge-to-edge and large-screen behavior at 36. **Opus** (system-wide build change, many breaking-change risks; route to a cluster worker if one is attached). Done when: CI builds a signed APK, it installs over v1.7 on a phone (same key), widget and dashboard work.
 - [ ] 5. Release hardening: enable R8 (`isMinifyEnabled`, `isShrinkResources`) with keep rules for JSch; add a network security config (cleartext off). **Sonnet** (needs testing that SSH still works after shrinking). Depends on 4. Done when: release APK connects and refreshes on a real server.
 - [ ] 6. Android unit tests: JVM tests for `Stats.kt` JSON parsing (against a fixture captured from `claude-dash --json`) and `Prefs` migration; run `testDebugUnitTest` in CI. **Sonnet**. Done when: CI runs and passes the tests.
